@@ -1,20 +1,42 @@
 # TODO add all imports needed here
-import InvalidException 
 import json
 import sys
-import MatamzonParser
+import argparse
+
+class InvalidIdException(Exception):
+    pass
+
+class InvalidPriceException(Exception):
+    pass
+
+class MatamzonParser(argparse.ArgumentParser):
+    def error(self, message):
+        sys.stderr.write("Usage: python3 matamazon.py -l < matamazon_log > -s < matamazon_system > -o <output_file> -os <out_matamazon_system>\n")
+       # sys.exit(1)
+    
+    @staticmethod
+    def get_parser():
+        parser = MatamzonParser(description='Matamazon System', 
+        usage="Usage: python3 matamazon.py -l < matamazon_log > -s < matamazon_system > -o <output_file> -os <out_matamazon_system>")
+        parser.add_argument('-l', '--l',type=str, required=True, help='Path to matamazon log file', dest ='l')
+        parser.add_argument('-s', '--s', type=str, required=False, help='Path to matamazon system file', dest ='s')
+        parser.add_argument('-o', '--o', type=str, required=False, help='Output file path', dest ='o')
+        parser.add_argument('-os', '--os', type=str, required=False, help='Output matamazon system file path', dest ='os')
+        return parser
+        pass
+
 class Person:
     type = "Person"
     def __init__(self, id, name, city, address):
         if not isinstance(id, int) or id < 0:
-            raise InvalidException.InvalidIdException(f'{type} ID must be a non-negative integer.')
+            raise InvalidIdException(f'{self.type} ID must be a non-negative integer.')
         self.id = id
         self.name = name
         self.city = city
         self.address = address
 
     def __repr__(self):
-        return f"{type}(id={self.id}, name='{self.name}', city='{self.city}', address='{self.address}')"
+        return f"{self.type}(id={self.id}, name='{self.name}', city='{self.city}', address='{self.address}')"
     pass
 
 class Customer(Person):
@@ -37,7 +59,6 @@ class Customer(Person):
     """
     # TODO implement this class as instructed
     type = "Customer"
-    pass
 
 class Supplier(Person):
     """
@@ -59,7 +80,6 @@ class Supplier(Person):
 
     # TODO implement this class as instructed
     type = "Supplier"
-    pass
 
 
 class Product:
@@ -87,11 +107,11 @@ class Product:
     # TODO implement this class as instructed
     def __init__(self, id, name, price, supplier_id, quantity):
         if not isinstance(id, int) or id < 0:
-            raise InvalidException.InvalidIdException('Product ID must be a non-negative integer.')
+            raise InvalidIdException('Product ID must be a non-negative integer.')
         if not isinstance(price, (int, float)) or price < 0:
-            raise InvalidException.InvalidPriceException('Product price must be a non-negative number.')
+            raise InvalidPriceException('Product price must be a non-negative number.')
         if not isinstance(supplier_id, int) or supplier_id < 0:
-            raise InvalidException.InvalidIdException('Product supplier ID must be a non-negative integer.')
+            raise InvalidIdException('Product supplier ID must be a non-negative integer.')
         self.id = id
         self.name = name
         self.price = price
@@ -130,13 +150,13 @@ class Order:
     # TODO implement this class as instructed
     def __init__(self, id, customer_id, product_id, quantity, total_price):
         if not isinstance(id, int) or id < 0:
-            raise InvalidException.InvalidIdException('Order ID must be a non-negative integer.')
+            raise InvalidIdException('Order ID must be a non-negative integer.')
         if not isinstance(customer_id, int) or customer_id < 0:
-            raise InvalidException.InvalidIdException('Customer ID must be a non-negative integer.')
+            raise InvalidIdException('Customer ID must be a non-negative integer.')
         if not isinstance(product_id, int) or product_id < 0:
-            raise InvalidException.InvalidIdException('Product ID must be a non-negative integer.')
-        if not isinstance(total_price, int) or total_price < 0:
-            raise InvalidException.InvalidPriceException('Total price must be a non-negative number.')
+            raise InvalidIdException('Product ID must be a non-negative integer.')
+        if not isinstance(total_price, (int, float)) or total_price < 0:
+            raise InvalidPriceException('Total price must be a non-negative number.')
         self.id = id
         self.customer_id = customer_id
         self.product_id = product_id
@@ -197,13 +217,14 @@ class MatamazonSystem:
                   customers AND suppliers).
         """
         # TODO implement this method as instructed
+
         if is_customer:
             if entity.id in self.customers.keys():
-                raise InvalidException.InvalidIdException('Customer ID already exists.')
+                raise InvalidIdException('Customer ID already exists in the system.')
             self.customers[entity.id] = entity
         else:
             if entity.id in self.suppliers.keys():
-                raise InvalidException.InvalidIdException('Supplier ID already exists.')
+                raise InvalidIdException('Supplier ID already exists in the system.')
             self.suppliers[entity.id] = entity
         pass
 
@@ -229,7 +250,7 @@ class MatamazonSystem:
         # TODO implement this method as instructed
         if product.id in self.products.keys() :
             if product.supplier_id != self.products[product.id].supplier_id:
-                raise InvalidException.InvalidIdException('Supplier ID does not match existing product supplier ID.')
+                raise InvalidIdException('Supplier ID does not match existing product supplier ID.')
             else :
                 self.products[product.id].quantity = product.quantity
         else :
@@ -270,10 +291,10 @@ class MatamazonSystem:
         if quantity > product.quantity:
             return "The quantity requested for this product is greater than the quantity in stock"
         product.quantity -= quantity
-        order = Order(self.next_order_id, customer_id, product_id, quantity)
+        total_price = product.price * quantity
+        order = Order(self.next_order_id, customer_id, product_id, quantity, total_price)
         self.orders[self.next_order_id] = order
         self.next_order_id += 1
-        return "The order has been accepted in the system"
 
     def remove_object(self, _id, class_type):
         """
@@ -299,33 +320,33 @@ class MatamazonSystem:
         # TODO implement this method as instructed
         class_type = class_type.strip().lower()
         if class_type == "order":
-            if _id not in self.orders:
-                raise InvalidException.InvalidIdException('Order ID does not exist.')
+            if _id not in self.orders.keys():
+                raise InvalidIdException('Order ID does not exist.')
             order = self.orders.pop(_id)
             product = self.products[order.product_id]
             product.quantity += order.quantity
             return order.quantity
         elif class_type == "customer":
-            if _id not in self.customers:
-                raise InvalidException.InvalidIdException('Customer ID does not exist.')
+            if _id not in self.customers.keys():
+                raise InvalidIdException('Customer ID does not exist.')
             for order in self.orders.values():
                 if order.customer_id == _id:
-                    raise InvalidException.InvalidIdException('Cannot remove customer with existing orders.')
+                    raise InvalidIdException('Cannot remove customer with existing orders.')
             del self.customers[_id]
         elif class_type == "supplier":
-            if _id not in self.suppliers:
-                raise InvalidException.InvalidIdException('Supplier ID does not exist.')
+            if _id not in self.suppliers.keys():
+                raise InvalidIdException('Supplier ID does not exist.')
             for order in self.orders.values():
                 product = self.products[order.product_id]
                 if product.supplier_id == _id:
-                    raise InvalidException.InvalidIdException('Cannot remove supplier with existing orders.')
+                    raise InvalidIdException('Cannot remove supplier with existing orders.')
             del self.suppliers[_id]
         elif class_type == "product":
-            if _id not in self.products:
-                raise InvalidException.InvalidIdException('Product ID does not exist.')
+            if _id not in self.products.keys():
+                raise InvalidIdException('Product ID does not exist.')
             for order in self.orders.values():
                 if order.product_id == _id:
-                    raise InvalidException.InvalidIdException('Cannot remove product with existing orders.')
+                    raise InvalidIdException('Cannot remove product with existing orders.')
             del self.products[_id]
         pass
 
@@ -369,13 +390,21 @@ class MatamazonSystem:
         """
         # TODO implement this method as instructed
         try:
-            with open(path, 'w') as f:
+            if path is sys.stdout:
                 for customer in self.customers.values():
-                    f.write(repr(customer) + '\n')
+                    print(repr(customer))
                 for supplier in self.suppliers.values():
-                    f.write(repr(supplier) + '\n')
+                    print(repr(supplier))
                 for product in self.products.values():
-                    f.write(repr(product) + '\n')
+                    print(repr(product))
+            else:
+                with open(path, 'w') as f:
+                    for customer in self.customers.values():
+                        f.write(repr(customer) + '\n')
+                    for supplier in self.suppliers.values():
+                        f.write(repr(supplier) + '\n')
+                    for product in self.products.values():
+                        f.write(repr(product) + '\n')
         except OSError as e:
             raise e
         pass
@@ -402,7 +431,7 @@ class MatamazonSystem:
         """
         # TODO implement this method as instructed
         try:
-            with open(out_file, 'w') as f:
+            if out_file is sys.stdout:
                 orders_by_city = {}
                 for order in self.orders.values():
                     product = self.products[order.product_id]
@@ -410,9 +439,21 @@ class MatamazonSystem:
                     city = supplier.city
                     order_str = repr(order)
                     if city not in orders_by_city:
-                        orders_by_city[city] = ()
+                        orders_by_city[city] = []
                     orders_by_city[city].append(order_str)
-                json.dump(orders_by_city, f, indent=4)
+                json.dump(orders_by_city, sys.stdout, indent=4)
+            else:
+                with open(out_file, 'w') as f:
+                    orders_by_city = {}
+                    for order in self.orders.values():
+                        product = self.products[order.product_id]
+                        supplier = self.suppliers[product.supplier_id]
+                        city = supplier.city
+                        order_str = repr(order)
+                        if city not in orders_by_city:
+                            orders_by_city[city] = []
+                        orders_by_city[city].append(order_str)
+                    json.dump(orders_by_city, f)
         except Exception as e:
             raise e
         pass
@@ -457,9 +498,9 @@ def load_system_from_file(path):
 # TODO all the main part here
 
 def apply_register(system, line):
-    parts = line.strip().split(',')
-    entity_type = parts[1].strip()
-    id = parts[2].strip()
+    parts = line.strip().split()
+    entity_type = parts[1].strip().capitalize()
+    id = int(parts[2].strip())
     name = parts[3].strip().replace("_", " ")
     city = parts[4].strip().replace("_", " ")
     address = parts[5].strip().replace("_", " ")
@@ -472,50 +513,48 @@ def apply_register(system, line):
     pass
 
 def apply_add(system, line):
-    parts = line.strip().split(',')
+    parts = line.strip().split()
     id = parts[1].strip()
     name = parts[2].strip().replace("_", " ")
     price = parts[3].strip()
     supplier_id = parts[4].strip()
     quantity = parts[5].strip()
-    product = Product(id, name, price, supplier_id, quantity)
+    product = Product(int(id), name, float(price), int(supplier_id), int(quantity))
     system.add_or_update_product(product)
     pass
 
 def apply_order(system, line):
-    parts = line.strip().split(',')
+    parts = line.strip().split()
     customer_id = parts[1].strip()
     product_id = parts[2].strip()
     if len(parts) > 3:
         quantity = parts[3].strip()
     else:
         quantity = 1
-    status = system.place_order(customer_id, product_id, quantity)
-    print(status)
+    system.place_order(int(customer_id), int(product_id), int(quantity))
     pass
 
 def apply_remove(system, line):
-    parts = line.strip().split(',')
+    parts = line.strip().split()
     class_type = parts[1].strip()
     id = parts[2].strip()
-    system.remove_object(id, class_type)
+    system.remove_object(int(id), class_type)
     pass
 
 def apply_search(system, line):
-    parts = line.strip().split(',')
+    parts = line.strip().split()
     query = parts[1].strip()
     if len(parts) > 2:
-        max_price = parts[2].strip()
+        max_price = float(parts[2].strip())
     else:
         max_price = None
     results = system.search_products(query, max_price)
-    for product in results:
-        print(product)
+    print(results)
     pass
 
 def __main__():
     parser = MatamzonParser.get_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(sys.argv[1:])
     if args.s is not None:
         matamazon_system = load_system_from_file(args.s)
     else:
@@ -534,7 +573,8 @@ def __main__():
                 elif line.startswith("search"):
                     apply_search(matamazon_system, line)
             except Exception as e:
-                print("The matamazon script has encountered an error")
+                print("The matamazon script has encountered an error", file=sys.stderr)
+                print("The matamazon script has encountered an error", file=sys.stdout)                
                 exit(1)
     if args.o is not None:
         matamazon_system.export_orders(args.o)
@@ -546,3 +586,6 @@ def __main__():
         matamazon_system.export_system_to_file(sys.stdout)
 
     pass
+
+if __name__ == "__main__":
+    __main__()
