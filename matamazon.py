@@ -488,7 +488,8 @@ def load_system_from_file(path):
     with open(path, 'r') as f:
         for line in f:
             line = line.strip()
-            if not line: continue
+            if not line:
+                continue
             
             obj = eval(line)
 
