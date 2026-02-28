@@ -12,7 +12,7 @@ class InvalidPriceException(Exception):
 class MatamzonParser(argparse.ArgumentParser):
     def error(self, message):
         sys.stderr.write("Usage: python3 matamazon.py -l < matamazon_log > -s < matamazon_system > -o <output_file> -os <out_matamazon_system>\n")
-       # sys.exit(1)
+        sys.exit(1)
     
     @staticmethod
     def get_parser():
@@ -35,8 +35,6 @@ class Person:
         self.city = city
         self.address = address
 
-    def __repr__(self):
-        return f"{self.type}(id={self.id}, name='{self.name}', city='{self.city}', address='{self.address}')"
     pass
 
 class Customer(Person):
@@ -58,7 +56,8 @@ class Customer(Person):
         Exact formatting requirements appear in the assignment PDF.
     """
     # TODO implement this class as instructed
-    type = "Customer"
+    def __repr__(self):
+        return f"Customer(id={self.id}, name='{self.name}', city='{self.city}', address='{self.address}')"
 
 class Supplier(Person):
     """
@@ -79,7 +78,8 @@ class Supplier(Person):
     """
 
     # TODO implement this class as instructed
-    type = "Supplier"
+    def __repr__(self):
+        return f"Supplier(id={self.id}, name='{self.name}', city='{self.city}', address='{self.address}')"
 
 
 class Product:
@@ -248,11 +248,13 @@ class MatamazonSystem:
                 - If attempting to update a product but supplier_id differs from the existing product.
         """
         # TODO implement this method as instructed
+        if product.supplier_id not in self.suppliers.keys():
+            raise InvalidIdException('Supplier ID does not exist in the system.')
         if product.id in self.products.keys() :
             if product.supplier_id != self.products[product.id].supplier_id:
                 raise InvalidIdException('Supplier ID does not match existing product supplier ID.')
             else :
-                self.products[product.id].quantity = product.quantity
+                self.products[product.id] = product
         else :
             self.products[product.id] = product
         pass
@@ -285,6 +287,8 @@ class MatamazonSystem:
             - The specification assumes quantity is an integer.
         """
         # TODO implement this method as instructed
+        if customer_id not in self.customers.keys():
+            raise InvalidIdException('Customer ID does not exist in the system.')
         if product_id not in self.products.keys():
             return "The product does not exist in the system"
         product = self.products[product_id]
@@ -295,6 +299,7 @@ class MatamazonSystem:
         order = Order(self.next_order_id, customer_id, product_id, quantity, total_price)
         self.orders[self.next_order_id] = order
         self.next_order_id += 1
+        return "The order has been accepted in the system"
 
     def remove_object(self, _id, class_type):
         """
@@ -348,6 +353,8 @@ class MatamazonSystem:
                 if order.product_id == _id:
                     raise InvalidIdException('Cannot remove product with existing orders.')
             del self.products[_id]
+        else:
+            raise InvalidIdException('Invalid class type for removal.')
         pass
 
     def search_products(self, query, max_price=None):
@@ -431,29 +438,22 @@ class MatamazonSystem:
         """
         # TODO implement this method as instructed
         try:
-            if out_file is sys.stdout:
-                orders_by_city = {}
-                for order in self.orders.values():
-                    product = self.products[order.product_id]
-                    supplier = self.suppliers[product.supplier_id]
-                    city = supplier.city
-                    order_str = repr(order)
-                    if city not in orders_by_city:
-                        orders_by_city[city] = []
-                    orders_by_city[city].append(order_str)
-                json.dump(orders_by_city, sys.stdout, indent=4)
-            else:
-                with open(out_file, 'w') as f:
-                    orders_by_city = {}
-                    for order in self.orders.values():
-                        product = self.products[order.product_id]
-                        supplier = self.suppliers[product.supplier_id]
-                        city = supplier.city
-                        order_str = repr(order)
-                        if city not in orders_by_city:
-                            orders_by_city[city] = []
-                        orders_by_city[city].append(order_str)
-                    json.dump(orders_by_city, f)
+            orders_by_city = {}
+            for order in self.orders.values():
+                # Extract city via product -> supplier
+                product = self.products[order.product_id]
+                supplier = self.suppliers[product.supplier_id]
+                city = supplier.city
+            
+                # Format order as string using repr()
+                order_str = repr(order)
+            
+                if city not in orders_by_city:
+                    orders_by_city[city] = []
+                orders_by_city[city].append(order_str)
+        
+            # Write the dictionary directly to the file-like object
+            json.dump(orders_by_city, out_file, indent=4)
         except Exception as e:
             raise e
         pass
@@ -480,19 +480,33 @@ def load_system_from_file(path):
     """
     # TODO implement this function as instructed
     system = MatamazonSystem()
+    
+    suppliers = []
+    products = []
+    customers = []
+
     with open(path, 'r') as f:
         for line in f:
             line = line.strip()
-            if line.startswith("Customer"):
-                customer = eval(line)
-                system.register_entity(customer, True)
-            elif line.startswith("Supplier"):
-                supplier = eval(line)
-                system.register_entity(supplier, False)
+            if not line: continue
+            
+            obj = eval(line)
+
+            if line.startswith("Supplier"):
+                suppliers.append(obj)
             elif line.startswith("Product"):
-                product = eval(line)
-                system.add_or_update_product(product)
-    return system  
+                products.append(obj)
+            elif line.startswith("Customer"):
+                customers.append(obj)
+
+    # Now add them to the system in the correct order
+    for supplier in suppliers:
+        system.register_entity(supplier, is_customer=False)
+    for product in products:
+        system.add_or_update_product(product)
+    for customer in customers:
+        system.register_entity(customer, is_customer=True)
+    return system
     pass
 
 # TODO all the main part here
@@ -552,40 +566,52 @@ def apply_search(system, line):
     print(results)
     pass
 
+SUCCESS = 0
+FAILED = 1
+
 def __main__():
-    parser = MatamzonParser.get_parser()
-    args = parser.parse_args(sys.argv[1:])
-    if args.s is not None:
-        matamazon_system = load_system_from_file(args.s)
-    else:
-        matamazon_system = MatamazonSystem()
-    with open(args.l, 'r') as log_file:
-        for line in log_file:
-            try:
-                if line.startswith("register"):               
-                    apply_register(matamazon_system, line)
-                elif line.startswith("add") or line.startswith("update"):
-                    apply_add(matamazon_system, line)
-                elif line.startswith("order"):
-                    apply_order(matamazon_system, line)
-                elif line.startswith("remove"):
-                    apply_remove(matamazon_system, line)
-                elif line.startswith("search"):
-                    apply_search(matamazon_system, line)
-            except Exception as e:
-                print("The matamazon script has encountered an error", file=sys.stderr)
-                print("The matamazon script has encountered an error", file=sys.stdout)                
-                exit(1)
-    if args.o is not None:
-        matamazon_system.export_orders(args.o)
-    else:
-        matamazon_system.export_orders(sys.stdout)
-    if args.os is not None:
-        matamazon_system.export_system_to_file(args.os)
-    else:
-        matamazon_system.export_system_to_file(sys.stdout)
-
-    pass
-
+    try:    
+        parser = MatamzonParser.get_parser()
+        args = parser.parse_args(sys.argv[1:])
+        if args.s is not None:
+            matamazon_system = load_system_from_file(args.s)
+        else:
+            matamazon_system = MatamazonSystem()
+        try:    
+            with open(args.l, 'r') as log_file:
+                for line in log_file:
+                
+                    if line.startswith("register"):               
+                        apply_register(matamazon_system, line)
+                    elif line.startswith("add") or line.startswith("update"):
+                        apply_add(matamazon_system, line)
+                    elif line.startswith("order"):
+                        apply_order(matamazon_system, line)
+                    elif line.startswith("remove"):
+                        apply_remove(matamazon_system, line)
+                    elif line.startswith("search"):
+                        apply_search(matamazon_system, line)
+        except (FileNotFoundError, IOError):
+            print("The matamazon script has encountered an error", file=sys.stdout)
+            print("The matamazon script has encountered an error", file=sys.stderr)
+            sys.exit(SUCCESS)
+        if args.o is not None:
+            with open(args.o, 'w') as f:
+                matamazon_system.export_orders(f)
+        else:
+            matamazon_system.export_orders(sys.stdout)
+        if args.os is not None:
+            matamazon_system.export_system_to_file(args.os)
+        else:
+            print(matamazon_system, file=sys.stdout)
+        return SUCCESS
+    except SystemExit as e:
+        if e.code == 0:
+            sys.exit(0)
+        sys.exit(FAILED)
+    except Exception:
+        print("The matamazon script has encountered an error", file=sys.stderr)
+        print("The matamazon script has encountered an error", file=sys.stdout)                
+        sys.exit(SUCCESS)
 if __name__ == "__main__":
     __main__()
