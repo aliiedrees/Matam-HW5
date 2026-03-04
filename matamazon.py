@@ -595,7 +595,7 @@ def __main__():
         except (FileNotFoundError, IOError):
             print("The matamazon script has encountered an error", file=sys.stdout)
             print("The matamazon script has encountered an error", file=sys.stderr)
-            sys.exit(SUCCESS)
+            return SUCCESS
         if args.o is not None:
             with open(args.o, 'w') as f:
                 matamazon_system.export_orders(f)
@@ -613,6 +613,6 @@ def __main__():
     except Exception:
         print("The matamazon script has encountered an error", file=sys.stderr)
         print("The matamazon script has encountered an error", file=sys.stdout)                
-        sys.exit(SUCCESS)
+        return SUCCESS
 if __name__ == "__main__":
     __main__()
