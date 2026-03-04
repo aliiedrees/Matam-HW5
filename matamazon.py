@@ -593,7 +593,7 @@ def __main__():
                     elif line.startswith("search"):
                         apply_search(matamazon_system, line)
         except (FileNotFoundError, IOError):
-            print("The matamazon script has encountered an error", file=sys.stderr)
+            print("The matamazon script has encountered an error")
             sys.exit(FAILED) 
         if args.o is not None:
             with open(args.o, 'w') as f:
